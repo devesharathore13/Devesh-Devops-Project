@@ -1,0 +1,26 @@
+---
+timezone: America/New_York
+ntp_servers:
+  - 0.pool.ntp.org
+  - 1.pool.ntp.org
+
+common_packages:
+  - curl
+  - wget
+  - git
+  - vim
+  - htop
+  - net-tools
+
+security_packages:
+  - fail2ban
+  - ufw
+
+ssh_port: 22
+ssh_permit_root_login: "no"
+ssh_password_authentication: "no"
+
+firewall_allowed_ports:
+  - 22
+  - 80
+  - 443

@@ -1,0 +1,66 @@
+name: Python FastAPI Pipeline
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '**.py'
+      - 'requirements.txt'
+      - 'Dockerfile'
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+    
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+        pip install flake8 pytest pytest-cov black
+    
+    - name: Format check
+      run: black --check app/
+    
+    - name: Lint
+      run: flake8 app/ --max-line-length=120
+    
+    - name: Run tests
+      run: pytest tests/ --cov=app --cov-report=xml
+    
+    - name: Security check
+      run: |
+        pip install bandit safety
+        bandit -r app/
+        safety check
+
+  docker:
+    needs: quality
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Build image
+      run: docker build -t deverathore13/python-api:${{ github.sha }} .
+    
+    - name: Scan with Trivy
+      uses: aquasecurity/trivy-action@master
+      with:
+        image-ref: deverathore13/python-api:${{ github.sha }}
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+    
+    - name: Push image
+      run: |
+        echo ${{ secrets.DOCKER_TOKEN }} | docker login -u ${{ secrets.DOCKER_USERNAME }} --password-stdin
+        docker push deverathore13/python-api:${{ github.sha }}
+        docker tag deverathore13/python-api:${{ github.sha }} deverathore13/python-api:latest
+        docker push deverathore13/python-api:latest

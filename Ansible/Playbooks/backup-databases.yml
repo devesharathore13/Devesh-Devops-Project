@@ -1,0 +1,37 @@
+---
+- name: Backup all databases
+  hosts: databases
+  become: yes
+  become_user: postgres
+  tasks:
+    - name: Create backup directory
+      file:
+        path: "{{ backup_dir }}/{{ ansible_date_time.date }}"
+        state: directory
+        mode: '0700'
+
+    - name: Dump database
+      postgresql_db:
+        name: appdb
+        state: dump
+        target: "{{ backup_dir }}/{{ ansible_date_time.date }}/appdb.sql"
+
+    - name: Compress backup
+      archive:
+        path: "{{ backup_dir }}/{{ ansible_date_time.date }}/appdb.sql"
+        dest: "{{ backup_dir }}/{{ ansible_date_time.date }}/appdb.sql.gz"
+        format: gz
+        remove: yes
+
+    - name: Remove old backups
+      find:
+        paths: "{{ backup_dir }}"
+        age: "{{ backup_retention_days }}d"
+        file_type: directory
+      register: old_backups
+
+    - name: Delete old backups
+      file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ old_backups.files }}"

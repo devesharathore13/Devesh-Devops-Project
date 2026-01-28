@@ -1,0 +1,33 @@
+name: Deploy to Kubernetes
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+      image-tag:
+        required: true
+        type: string
+    secrets:
+      KUBE_CONFIG:
+        required: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup kubectl
+      uses: azure/setup-kubectl@v3
+    
+    - name: Deploy
+      run: |
+        echo "${{ secrets.KUBE_CONFIG }}" > kubeconfig
+        export KUBECONFIG=kubeconfig
+        kubectl apply -f k8s/${{ inputs.environment }}/
+        kubectl set image deployment/app app=deverathore13/app:${{ inputs.image-tag }}
+        kubectl rollout status deployment/app -n ${{ inputs.environment }}

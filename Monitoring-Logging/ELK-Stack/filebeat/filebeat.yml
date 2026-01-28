@@ -1,0 +1,30 @@
+filebeat.inputs:
+  - type: log
+    enabled: true
+    paths:
+      - /var/log/*.log
+      - /var/log/nginx/*.log
+    fields:
+      type: nginx-access
+
+  - type: docker
+    containers.ids: '*'
+    processors:
+      - add_docker_metadata:
+          host: "unix:///var/run/docker.sock"
+
+filebeat.config.modules:
+  path: ${path.config}/modules.d/*.yml
+  reload.enabled: false
+
+setup.kibana:
+  host: "kibana:5601"
+
+output.logstash:
+  hosts: ["logstash:5000"]
+
+processors:
+  - add_host_metadata:
+      when.not.contains.tags: forwarded
+  - add_cloud_metadata: ~
+  - add_docker_metadata: ~

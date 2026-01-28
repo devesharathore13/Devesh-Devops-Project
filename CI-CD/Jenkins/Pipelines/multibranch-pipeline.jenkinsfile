@@ -1,0 +1,44 @@
+def deployEnv = 'dev'
+
+if (env.BRANCH_NAME == 'main') {
+    deployEnv = 'production'
+} else if (env.BRANCH_NAME == 'staging') {
+    deployEnv = 'staging'
+}
+
+pipeline {
+    agent {
+        label 'docker'
+    }
+    
+    parameters {
+        choice(name: 'DEPLOY_ENV', choices: ['dev', 'staging', 'production'], description: 'Environment')
+        booleanParam(name: 'RUN_TESTS', defaultValue: true, description: 'Run tests?')
+        string(name: 'VERSION_TAG', defaultValue: '', description: 'Custom version tag')
+    }
+    
+    stages {
+        stage('Build') {
+            steps {
+                sh "docker build -t deverathore13/app:${env.BRANCH_NAME}-${env.BUILD_NUMBER} ."
+            }
+        }
+        
+        stage('Test') {
+            when {
+                expression { params.RUN_TESTS }
+            }
+            steps {
+                sh 'docker run --rm deverathore13/app:${env.BRANCH_NAME}-${env.BUILD_NUMBER} npm test'
+            }
+        }
+        
+        stage('Deploy') {
+            steps {
+                sh """
+                    kubectl apply -f k8s/${deployEnv}/ --namespace=${deployEnv}
+                """
+            }
+        }
+    }
+}

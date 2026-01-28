@@ -1,0 +1,43 @@
+---
+- name: Configure all servers
+  hosts: all
+  become: yes
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+
+    - name: Install common packages
+      apt:
+        name: "{{ common_packages }}"
+        state: present
+
+    - name: Set timezone
+      timezone:
+        name: "{{ timezone }}"
+
+- name: Setup webservers
+  hosts: webservers
+  become: yes
+  roles:
+    - docker
+    - webserver
+
+- name: Setup databases
+  hosts: databases
+  become: yes
+  roles:
+    - database
+
+- name: Setup Kubernetes cluster
+  hosts: kubernetes
+  become: yes
+  roles:
+    - kubernetes
+
+- name: Setup monitoring
+  hosts: monitoring
+  become: yes
+  roles:
+    - docker
+    - monitoring

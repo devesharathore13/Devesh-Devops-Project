@@ -1,0 +1,86 @@
+stages:
+  - build
+  - test
+  - security
+  - deploy
+
+variables:
+  DOCKER_DRIVER: overlay2
+  IMAGE_TAG: $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA
+  LATEST_TAG: $CI_REGISTRY_IMAGE:latest
+
+before_script:
+  - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+
+build:
+  stage: build
+  image: docker:24-dind
+  services:
+    - docker:24-dind
+  script:
+    - docker build -t $IMAGE_TAG -t $LATEST_TAG .
+    - docker push $IMAGE_TAG
+    - docker push $LATEST_TAG
+  only:
+    - main
+    - develop
+
+test:unit:
+  stage: test
+  image: node:20-alpine
+  script:
+    - npm ci
+    - npm run test:coverage
+  coverage: '/Coverage: \d+\.\d+%/'
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage/cobertura-coverage.xml
+
+test:integration:
+  stage: test
+  image: docker/compose:latest
+  services:
+    - docker:24-dind
+  script:
+    - docker-compose -f docker-compose.test.yml up -d
+    - docker-compose -f docker-compose.test.yml run api npm run test:integration
+  after_script:
+    - docker-compose -f docker-compose.test.yml down
+
+security:scan:
+  stage: security
+  image: aquasec/trivy:latest
+  script:
+    - trivy image --severity HIGH,CRITICAL $IMAGE_TAG
+  allow_failure: true
+
+deploy:staging:
+  stage: deploy
+  image: alpine/k8s:1.28.0
+  script:
+    - kubectl config set-cluster k8s --server="$KUBE_URL"
+    - kubectl config set-credentials gitlab --token="$KUBE_TOKEN"
+    - kubectl config set-context default --cluster=k8s --user=gitlab
+    - kubectl config use-context default
+    - kubectl set image deployment/app app=$IMAGE_TAG -n staging
+    - kubectl rollout status deployment/app -n staging
+  environment:
+    name: staging
+    url: https://staging.example.com
+  only:
+    - develop
+
+deploy:production:
+  stage: deploy
+  image: alpine/k8s:1.28.0
+  script:
+    - kubectl set image deployment/app app=$IMAGE_TAG -n production
+    - kubectl rollout status deployment/app -n production
+  environment:
+    name: production
+    url: https://example.com
+  when: manual
+  only:
+    - main

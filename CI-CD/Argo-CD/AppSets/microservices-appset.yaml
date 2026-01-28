@@ -1,0 +1,32 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: microservices
+  namespace: argocd
+spec:
+  generators:
+    - list:
+        elements:
+          - name: auth-service
+            namespace: production
+          - name: user-service
+            namespace: production
+          - name: payment-service
+            namespace: production
+  
+  template:
+    metadata:
+      name: '{{name}}'
+    spec:
+      project: production
+      source:
+        repoURL: https://github.com/deverathore/microservices.git
+        targetRevision: main
+        path: '{{name}}/k8s'
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: '{{namespace}}'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true

@@ -1,0 +1,26 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: cleanup-old-logs
+  namespace: production
+spec:
+  schedule: "0 2 * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: cleanup
+            image: deverathore13/cleanup-script:latest
+            command: ["/bin/bash"]
+            args:
+            - -c
+            - find /logs -type f -mtime +7 -delete
+            volumeMounts:
+            - name: logs
+              mountPath: /logs
+          restartPolicy: OnFailure
+          volumes:
+          - name: logs
+            hostPath:
+              path: /var/log/app

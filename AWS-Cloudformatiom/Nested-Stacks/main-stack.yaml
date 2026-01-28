@@ -1,0 +1,47 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Main stack that creates entire infrastructure
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Default: production
+
+Resources:
+  VPCStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: https://s3.amazonaws.com/my-templates/vpc.yaml
+      Parameters:
+        EnvironmentName: !Ref EnvironmentName
+
+  RDSStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: VPCStack
+    Properties:
+      TemplateURL: https://s3.amazonaws.com/my-templates/rds.yaml
+      Parameters:
+        VPCId: !GetAtt VPCStack.Outputs.VPC
+        DBPassword: !Sub '{{resolve:secretsmanager:${DBSecret}:SecretString:password}}'
+
+  ECSStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: 
+      - VPCStack
+      - RDSStack
+    Properties:
+      TemplateURL: https://s3.amazonaws.com/my-templates/ecs.yaml
+      Parameters:
+        VPCId: !GetAtt VPCStack.Outputs.VPC
+        DBEndpoint: !GetAtt RDSStack.Outputs.DBEndpoint
+
+  DBSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      GenerateSecretString:
+        SecretStringTemplate: '{"username": "admin"}'
+        GenerateStringKey: password
+        PasswordLength: 16
+
+Outputs:
+  ALBURL:
+    Value: !GetAtt ECSStack.Outputs.LoadBalancerDNS

@@ -1,0 +1,64 @@
+---
+- name: Security hardening
+  hosts: all
+  become: yes
+  tasks:
+    - name: Configure SSH
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "{{ item.regexp }}"
+        line: "{{ item.line }}"
+      loop:
+        - { regexp: '^#?PermitRootLogin', line: 'PermitRootLogin no' }
+        - { regexp: '^#?PasswordAuthentication', line: 'PasswordAuthentication no' }
+        - { regexp: '^#?Port', line: 'Port {{ ssh_port }}' }
+      notify: restart sshd
+
+    - name: Install fail2ban
+      apt:
+        name: fail2ban
+        state: present
+
+    - name: Configure fail2ban
+      copy:
+        content: |
+          [sshd]
+          enabled = true
+          port = {{ ssh_port }}
+          logpath = /var/log/auth.log
+          maxretry = 3
+        dest: /etc/fail2ban/jail.local
+      notify: restart fail2ban
+
+    - name: Install UFW
+      apt:
+        name: ufw
+        state: present
+
+    - name: Allow SSH
+      ufw:
+        rule: allow
+        port: "{{ ssh_port }}"
+        proto: tcp
+
+    - name: Allow application ports
+      ufw:
+        rule: allow
+        port: "{{ item }}"
+        proto: tcp
+      loop: "{{ firewall_allowed_ports }}"
+
+    - name: Enable UFW
+      ufw:
+        state: enabled
+
+  handlers:
+    - name: restart sshd
+      systemd:
+        name: sshd
+        state: restarted
+
+    - name: restart fail2ban
+      systemd:
+        name: fail2ban
+        state: restarted

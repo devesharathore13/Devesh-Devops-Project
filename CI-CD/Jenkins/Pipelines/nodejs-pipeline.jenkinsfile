@@ -1,0 +1,106 @@
+pipeline {
+    agent {
+        kubernetes {
+            yaml '''
+apiVersion: v1
+kind: Pod
+spec:
+  containers:
+  - name: node
+    image: node:20-alpine
+    command: ['cat']
+    tty: true
+  - name: docker
+    image: docker:24-dind
+    securityContext:
+      privileged: true
+    volumeMounts:
+    - name: docker-sock
+      mountPath: /var/run/docker.sock
+  volumes:
+  - name: docker-sock
+    hostPath:
+      path: /var/run/docker.sock
+'''
+        }
+    }
+    
+    environment {
+        DOCKER_REGISTRY = 'deverathore13'
+        APP_NAME = 'node-api'
+        DOCKER_CREDS = credentials('dockerhub-token')
+    }
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+        
+        stage('Install Dependencies') {
+            steps {
+                container('node') {
+                    sh 'npm ci'
+                }
+            }
+        }
+        
+        stage('Run Tests') {
+            steps {
+                container('node') {
+                    sh 'npm test'
+                    sh 'npm run lint'
+                }
+            }
+        }
+        
+        stage('Build Docker Image') {
+            steps {
+                container('docker') {
+                    script {
+                        def imageTag = "${env.DOCKER_REGISTRY}/${env.APP_NAME}:${env.BUILD_NUMBER}"
+                        def latestTag = "${env.DOCKER_REGISTRY}/${env.APP_NAME}:latest"
+                        sh "docker build -t ${imageTag} -t ${latestTag} ."
+                    }
+                }
+            }
+        }
+        
+        stage('Push to Registry') {
+            steps {
+                container('docker') {
+                    script {
+                        sh 'echo $DOCKER_CREDS_PSW | docker login -u $DOCKER_CREDS_USR --password-stdin'
+                        sh "docker push ${env.DOCKER_REGISTRY}/${env.APP_NAME}:${env.BUILD_NUMBER}"
+                        sh "docker push ${env.DOCKER_REGISTRY}/${env.APP_NAME}:latest"
+                    }
+                }
+            }
+        }
+        
+        stage('Deploy to K8s') {
+            steps {
+                script {
+                    sh """
+                        kubectl set image deployment/${env.APP_NAME} \
+                        ${env.APP_NAME}=${env.DOCKER_REGISTRY}/${env.APP_NAME}:${env.BUILD_NUMBER} \
+                        -n production
+                    """
+                }
+            }
+        }
+    }
+    
+    post {
+        always {
+            cleanWs()
+        }
+        success {
+            slackSend(color: 'good', message: "Build ${env.BUILD_NUMBER} deployed successfully")
+        }
+        failure {
+            slackSend(color: 'danger', message: "Build ${env.BUILD_NUMBER} failed")
+        }
+    }
+}

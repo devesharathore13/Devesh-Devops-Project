@@ -1,0 +1,58 @@
+image: python:3.11-slim
+
+stages:
+  - lint
+  - test
+  - build
+  - deploy
+
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+
+cache:
+  paths:
+    - .cache/pip
+    - venv/
+
+before_script:
+  - python -m venv venv
+  - source venv/bin/activate
+  - pip install -r requirements.txt
+
+lint:
+  stage: lint
+  script:
+    - flake8 app/
+    - black --check app/
+    - mypy app/
+
+test:
+  stage: test
+  script:
+    - pytest tests/ --cov=app --cov-report=term --cov-report=xml
+  coverage: '/TOTAL.*\s+(\d+%)$/'
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage.xml
+
+build:docker:
+  stage: build
+  image: docker:24
+  services:
+    - docker:24-dind
+  script:
+    - docker build -t deverathore13/python-api:$CI_COMMIT_SHA .
+    - echo $DOCKERHUB_TOKEN | docker login -u $DOCKERHUB_USER --password-stdin
+    - docker push deverathore13/python-api:$CI_COMMIT_SHA
+  only:
+    - main
+
+deploy:k8s:
+  stage: deploy
+  image: bitnami/kubectl:latest
+  script:
+    - kubectl set image deployment/python-api python-api=deverathore13/python-api:$CI_COMMIT_SHA
+  only:
+    - main

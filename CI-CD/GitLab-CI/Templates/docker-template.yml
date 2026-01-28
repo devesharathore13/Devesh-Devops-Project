@@ -1,0 +1,18 @@
+.docker_build:
+  image: docker:24
+  services:
+    - docker:24-dind
+  before_script:
+    - echo $CI_REGISTRY_PASSWORD | docker login -u $CI_REGISTRY_USER --password-stdin $CI_REGISTRY
+  script:
+    - docker build -t $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA .
+    - docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA
+
+.k8s_deploy:
+  image: bitnami/kubectl:latest
+  before_script:
+    - echo $KUBE_CONFIG | base64 -d > kubeconfig
+    - export KUBECONFIG=kubeconfig
+  script:
+    - kubectl apply -f k8s/
+    - kubectl set image deployment/$APP_NAME $APP_NAME=$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA

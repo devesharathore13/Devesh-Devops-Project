@@ -1,0 +1,31 @@
+---
+- name: Deploy application
+  hosts: webservers
+  become: yes
+  vars:
+    app_version: latest
+  tasks:
+    - name: Pull latest Docker image
+      docker_image:
+        name: "{{ docker_image }}"
+        source: pull
+        force_source: yes
+
+    - name: Stop existing containers
+      docker_compose:
+        project_src: /opt/app
+        state: absent
+
+    - name: Start new containers
+      docker_compose:
+        project_src: /opt/app
+        state: present
+
+    - name: Wait for application to be ready
+      uri:
+        url: "http://localhost:{{ app_port }}/health"
+        status_code: 200
+      register: result
+      until: result.status == 200
+      retries: 10
+      delay: 5

@@ -1,0 +1,47 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: IAM roles for developers
+
+Resources:
+  DeveloperRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: DeveloperRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub arn:aws:iam::${AWS::AccountId}:root
+            Action: sts:AssumeRole
+            Condition:
+              IpAddress:
+                aws:SourceIp:
+                  - 10.0.0.0/8
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/ReadOnlyAccess
+      Policies:
+        - PolicyName: DeveloperAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ec2:*
+                  - ecs:*
+                  - ecr:*
+                  - s3:*
+                  - cloudwatch:*
+                  - logs:*
+                Resource: '*'
+              - Effect: Deny
+                Action:
+                  - ec2:DeleteVpc
+                  - rds:Delete*
+                Resource: '*'
+
+  DevOpsGroup:
+    Type: AWS::IAM::Group
+    Properties:
+      GroupName: DevOps
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/PowerUserAccess

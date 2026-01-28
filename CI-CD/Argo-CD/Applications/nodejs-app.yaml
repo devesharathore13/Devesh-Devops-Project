@@ -1,0 +1,33 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: nodejs-api
+  namespace: argocd
+spec:
+  project: production
+  
+  source:
+    repoURL: https://github.com/deverathore/nodejs-api.git
+    targetRevision: main
+    path: k8s/overlays/production
+    kustomize:
+      images:
+        - deverathore13/node-api:v2.1
+  
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: production
+  
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
